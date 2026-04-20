@@ -550,7 +550,27 @@ async def post_init(application: Application) -> None:
     logger.info(f"Bot: @{BOT_USERNAME}")
 
 
-def main() -> None:
+# ─── Health check web server (Render + Uptime Robot uchun) ───────────────────
+
+async def run_health_server():
+    from aiohttp import web
+
+    async def health(request):
+        return web.Response(text="OK — Sticker Bot ishlayapti ✅")
+
+    server = web.Application()
+    server.router.add_get("/", health)
+    server.router.add_get("/health", health)
+
+    port = int(os.environ.get("PORT", 8080))
+    runner = web.AppRunner(server)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Health server: http://0.0.0.0:{port}")
+
+
+async def run_bot():
     if not BOT_TOKEN:
         logger.error("STICKER_BOT_TOKEN topilmadi!")
         return
@@ -568,7 +588,22 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     logger.info("Sticker bot ishga tushdi...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+
+    # Doim ishlab tursin
+    await asyncio.Event().wait()
+
+
+def main() -> None:
+    async def run_all():
+        await asyncio.gather(
+            run_health_server(),
+            run_bot(),
+        )
+
+    asyncio.run(run_all())
 
 
 if __name__ == "__main__":
